@@ -7,10 +7,48 @@ import textwrap
 BASE = Path("bbdd")
 OUT  = Path("salidas"); OUT.mkdir(exist_ok=True)
 
+def read_nowcast_table() -> pd.DataFrame:
+    """Carga nowcast_final_table detectando formato estándar o ES-CL."""
+    attempts = [
+        (BASE / "nowcast_final_table.csv",      {"sep": ",", "decimal": "."}),
+        (BASE / "nowcast_final_table_ESCL.csv", {"sep": ";", "decimal": ","}),
+    ]
+    errors = []
+    for path, kwargs in attempts:
+        if not path.exists():
+            continue
+        try:
+            df = pd.read_csv(path, encoding="utf-8", **kwargs)
+            # si leyó todo en 1 columna (p.ej. separador incorrecto), intenta la siguiente opción
+            if df.shape[1] == 1 and kwargs.get("sep") == ",":
+                errors.append(f"{path.name}: detecté 1 sola columna; ¿quizás es formato ES-CL?")
+                continue
+            return df
+        except Exception as exc:  # pragma: no cover - logging defensivo
+            errors.append(f"{path.name}: {exc}")
+    raise RuntimeError(
+        "No pude leer nowcast_final_table.csv ni la versión ES-CL. "
+        + " ; ".join(errors)
+    )
+
+def pick_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
+
 # === 1) Cargar tabla final y preparar datos (votos válidos, suman 100) ===
-df = pd.read_csv(BASE / "nowcast_final_table.csv", encoding="utf-8")
-# --- justo después de cargar nowcast_final_table.csv ---
-df = df[["candidate", "share_from_polls_pct"]].copy()
+df = read_nowcast_table()
+
+cand_col = pick_column(df, ["candidate", "candidato"])
+share_col = pick_column(df, ["share_from_polls_pct", "share_poll_pct", "share"])
+if cand_col is None or share_col is None:
+    raise RuntimeError(
+        "nowcast_final_table no tiene columnas 'candidate' y 'share_from_polls_pct' (o equivalentes). "
+        f"Columnas disponibles: {list(df.columns)}"
+    )
+df = df[[cand_col, share_col]].copy()
+df.columns = ["candidate", "share_from_polls_pct"]
 
 # 1) limpieza básica
 df["candidate"] = (df["candidate"]

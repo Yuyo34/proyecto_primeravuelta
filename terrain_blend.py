@@ -195,9 +195,13 @@ pleb22.columns = ["comuna_id","rechazo_2022","apruebo_2022"]
 pleb23 = pleb23[[p23_id, encontra23, afavor23]].copy()
 pleb23.columns = ["comuna_id","en_contra_2023","a_favor_2023"]
 
-for c in ["rechazo_2022","apruebo_2022","en_contra_2023","a_favor_2023"]:
-    pleb22[c] = pd.to_numeric(pleb22[c], errors="coerce") if c in pleb22.columns else pleb22
-    pleb23[c] = pd.to_numeric(pleb23[c], errors="coerce") if c in pleb23.columns else pleb23
+def coerce_numeric_cols(df: pd.DataFrame, cols: list[str]):
+    for col in cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+coerce_numeric_cols(pleb22, ["rechazo_2022","apruebo_2022"])
+coerce_numeric_cols(pleb23, ["en_contra_2023","a_favor_2023"])
 
 # merge base territorial
 terr = padron.merge(pleb22, on="comuna_id", how="left").merge(pleb23, on="comuna_id", how="left")
