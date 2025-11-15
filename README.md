@@ -40,6 +40,11 @@
    - Auto-detecta si `bbdd/nowcast_final_table.csv` viene en formato estándar o local (ES-CL) y mapea las columnas equivalentes antes de graficar.
    - _Opcional:_ mapas por comuna (requiere `geopandas` y shapes).
 
+6. **Snapshot sintético (`nowcast_snapshot.py`)**
+   - Reproduce el flujo descrito en `modelo_nowcast_presidencial.md` (prior histórico → encuestas → mercados) con pesos configurables.
+   - Simula probabilidades de ganar vía Dirichlet (200k draws) y mezcla con las probabilidades implícitas de mercados.
+   - Exporta `bbdd/nowcast_final_table.csv` y el gráfico final en `salidas/grafico_intencion_voto.png`, idéntico al mockup solicitado.
+
 ---
 
 ## 2) Estructura de carpetas
@@ -62,6 +67,7 @@ proyecto_primeravuelta/
 ├── qc_csv.py
 ├── fix_polls.py
 ├── nowcast_blend.py
+├── nowcast_snapshot.py
 ├── terrain_blend.py
 ├── plot_intencion.py
 └── README.md
@@ -152,6 +158,21 @@ Si no existe BSS, deja `w_platform_base` manual (ej. 1.0) y los demás en blanco
 
 ### Paso C — Blend encuestas + mercados
 ```powershell
+### Paso F — Snapshot sintético (mockup)
+```powershell
+(.venv) python .\nowcast_snapshot.py
+```
+- Corre todo el flujo descrito en `modelo_nowcast_presidencial.md` con datos sintéticos para replicar el mockup.
+- Crea automáticamente `bbdd/nowcast_final_table.csv` y `salidas/grafico_intencion_voto.png` (directorios se generan si no existen).
+- Útil para validar estilos, probar dashboards o entregar un ejemplo stand‑alone sin insumos reales.
+
+### Paso G — Diagnóstico de CSV problemáticos
+```powershell
+(.venv) python .\inspect_csv.py bbdd/results_2021_comuna.csv
+```
+- Entrega columnas detectadas, porcentaje de filas numéricas y el mapeo automático usado por `nowcast_snapshot.py`.
+- Úsalo con cualquier archivo de `bbdd/` para revisar separadores, encabezados y detectar rápidamente por qué el flujo no reconoce ciertos datos.
+
 (.venv) python .
 owcast_blend.py
 ```
@@ -223,8 +244,9 @@ owcast_blend.py
 
 - **PowerShell ejecuta literalmente “(.venv) python …”**  
   - Ese prefijo es sólo el _prompt_ que muestra que el venv está activo. El comando real es:  
-    ```powershell
-    python .\script.py
+- [ ] `python nowcast_blend.py` → cuotas nacionales y prob. ganar.
+- [ ] `python terrain_blend.py` → comunas × candidato, cuadra con nacional.
+- [ ] `python nowcast_snapshot.py` → mockup completo (`bbdd/nowcast_final_table.csv` + `salidas/grafico_intencion_voto.png`).
     ```
 
 ---
