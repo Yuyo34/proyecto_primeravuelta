@@ -178,11 +178,11 @@ pleb23 = read_csv_guess(BASE / "pleb_2023_comuna.csv")
 p22_id = find_col(pleb22, [r"^comuna_?id$", r"^cod", r"codigo_?comuna"])
 p23_id = find_col(pleb23, [r"^comuna_?id$", r"^cod", r"codigo_?comuna"])
 
-rech22 = find_col(pleb22, [r"rechazo", r"en_?contra", r"contra"])
-apr22  = find_col(pleb22, [r"apruebo", r"aprueba", r"^apr$"])
+rech22 = find_col(pleb22, [r"rechazo", r"en_?contra", r"contra", r"rech.*22"])
+apr22  = find_col(pleb22, [r"apruebo", r"aprueba", r"^apr$", r"apr.*22"])
 
-encontra23 = find_col(pleb23, [r"en_?contra", r"rechazo", r"contra"])
-afavor23   = find_col(pleb23, [r"a_?favor", r"apruebo", r"aprueba"])
+encontra23 = find_col(pleb23, [r"en_?contra", r"rechazo", r"contra", r"rech.*23"])
+afavor23   = find_col(pleb23, [r"a_?favor", r"apruebo", r"aprueba", r"apr.*23"])
 
 for nm, ref in [("p22_id",p22_id),("p23_id",p23_id),("rech22",rech22),("apr22",apr22),("encontra23",encontra23),("afavor23",afavor23)]:
     if ref is None:
@@ -195,9 +195,13 @@ pleb22.columns = ["comuna_id","rechazo_2022","apruebo_2022"]
 pleb23 = pleb23[[p23_id, encontra23, afavor23]].copy()
 pleb23.columns = ["comuna_id","en_contra_2023","a_favor_2023"]
 
-for c in ["rechazo_2022","apruebo_2022","en_contra_2023","a_favor_2023"]:
-    pleb22[c] = pd.to_numeric(pleb22[c], errors="coerce") if c in pleb22.columns else pleb22
-    pleb23[c] = pd.to_numeric(pleb23[c], errors="coerce") if c in pleb23.columns else pleb23
+def coerce_numeric_cols(df: pd.DataFrame, cols: list[str]):
+    for col in cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+coerce_numeric_cols(pleb22, ["rechazo_2022","apruebo_2022"])
+coerce_numeric_cols(pleb23, ["en_contra_2023","a_favor_2023"])
 
 # merge base territorial
 terr = padron.merge(pleb22, on="comuna_id", how="left").merge(pleb23, on="comuna_id", how="left")
