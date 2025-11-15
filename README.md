@@ -166,6 +166,13 @@ Si no existe BSS, deja `w_platform_base` manual (ej. 1.0) y los demás en blanco
 - Crea automáticamente `bbdd/nowcast_final_table.csv` y `salidas/grafico_intencion_voto.png` (directorios se generan si no existen).
 - Útil para validar estilos, probar dashboards o entregar un ejemplo stand‑alone sin insumos reales.
 
+### Paso G — Diagnóstico de CSV problemáticos
+```powershell
+(.venv) python .\inspect_csv.py bbdd/results_2021_comuna.csv
+```
+- Entrega columnas detectadas, porcentaje de filas numéricas y el mapeo automático usado por `nowcast_snapshot.py`.
+- Úsalo con cualquier archivo de `bbdd/` para revisar separadores, encabezados y detectar rápidamente por qué el flujo no reconoce ciertos datos.
+
 (.venv) python .
 owcast_blend.py
 ```

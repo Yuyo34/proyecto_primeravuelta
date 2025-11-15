@@ -128,10 +128,20 @@ def find_column(df: pd.DataFrame, patterns: list[str]) -> str | None:
 def aggregate_results_2021() -> dict[str, float]:
     df = read_csv_guess(BASE / "results_2021_comuna.csv")
     shares: dict[str, float] = {}
+    matched_columns: dict[str, str] = {}
     for key, pats in RESULTS_2021_ALIASES.items():
         col = find_column(df, pats)
         if not col:
             continue
+        matched_columns[key] = col
+        shares[key] = float(to_numeric(df[col]).fillna(0.0).sum())
+    total = sum(shares.values())
+    if total <= 0:
+        cols = ", ".join(df.columns[:20])  # evita imprimir archivos enormes
+        raise RuntimeError(
+            "results_2021_comuna.csv no tiene columnas numéricas reconocibles. "
+            f"Columnas detectadas: {matched_columns or 'ninguna'}. Encabezados disponibles: {cols}"
+        )
         shares[key] = float(to_numeric(df[col]).fillna(0.0).sum())
     total = sum(shares.values())
     if total <= 0:
@@ -365,6 +375,18 @@ def load_markets() -> pd.Series:
     markets = markets[markets["prob"].notna() & markets["prob"].between(0, 1)]
     if markets.empty:
         raise RuntimeError("markets.csv no tiene probabilidades válidas.")
+    markets["prob_weighted"] = markets["prob"] * markets["w_final"]
+    grouped = markets.groupby("candidate")[["prob_weighted", "w_final"]].sum()
+    agg = pd.Series(index=grouped.index, dtype=float)
+    positive_mask = grouped["w_final"] > 0
+    positive_idx = grouped.index[positive_mask]
+    agg.loc[positive_idx] = grouped.loc[positive_idx, "prob_weighted"] / grouped.loc[
+        positive_idx, "w_final"
+    ]
+    zero_candidates = grouped.index[~positive_mask]
+    if len(zero_candidates) > 0:
+        fallback = markets.groupby("candidate")["prob"].mean()
+        agg.loc[zero_candidates] = fallback.loc[zero_candidates]
     agg = markets.groupby("candidate", group_keys=False).apply(
     agg = markets.groupby("candidate").apply(
         lambda g: np.average(g["prob"], weights=g["w_final"]) if g["w_final"].sum() > 0 else g["prob"].mean()
