@@ -59,10 +59,40 @@ def read_csv_guess(path: Path) -> pd.DataFrame:
     return df
 
 
+NUMERIC_JUNK_RE = re.compile(r"[^0-9,\.\-]+")
+
+
+def _normalize_number_string(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return ""
+    value = NUMERIC_JUNK_RE.sub("", value)
+    if not value:
+        return ""
+    comma_pos = value.rfind(",")
+    dot_pos = value.rfind(".")
+    if "," in value and "." in value:
+        if comma_pos > dot_pos:
+            value = value.replace(".", "").replace(",", ".")
+        else:
+            value = value.replace(",", "")
+    else:
+        if value.count(",") == 1 and "." not in value:
+            value = value.replace(",", ".")
+        elif value.count(".") > 1 and "," not in value:
+            value = value.replace(".", "")
+    return value
+
+
 def to_numeric(series: pd.Series) -> pd.Series:
-    return pd.to_numeric(series.astype(str).str.replace("%", "", regex=False)
-                                   .str.replace(",", ".", regex=False),
-                         errors="coerce")
+    cleaned = (
+        series.astype(str)
+        .str.replace("%", "", regex=False)
+        .str.replace("\xa0", " ", regex=False)
+        .str.strip()
+    )
+    normalized = cleaned.map(_normalize_number_string)
+    return pd.to_numeric(normalized, errors="coerce")
 
 
 def prefer_clean(name: str) -> Path:
@@ -335,6 +365,7 @@ def load_markets() -> pd.Series:
     markets = markets[markets["prob"].notna() & markets["prob"].between(0, 1)]
     if markets.empty:
         raise RuntimeError("markets.csv no tiene probabilidades válidas.")
+    agg = markets.groupby("candidate", group_keys=False).apply(
     agg = markets.groupby("candidate").apply(
         lambda g: np.average(g["prob"], weights=g["w_final"]) if g["w_final"].sum() > 0 else g["prob"].mean()
     )
