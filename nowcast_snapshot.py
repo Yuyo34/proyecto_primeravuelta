@@ -366,6 +366,7 @@ def load_markets() -> pd.Series:
     if markets.empty:
         raise RuntimeError("markets.csv no tiene probabilidades válidas.")
     agg = markets.groupby("candidate", group_keys=False).apply(
+    agg = markets.groupby("candidate").apply(
         lambda g: np.average(g["prob"], weights=g["w_final"]) if g["w_final"].sum() > 0 else g["prob"].mean()
     )
     agg = agg.clip(lower=0.0)
