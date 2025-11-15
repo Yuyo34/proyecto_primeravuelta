@@ -25,17 +25,19 @@
      - `bbdd/winner_probs_{polls,market,blend}.csv`
      - `bbdd/nowcast_shares_poll{_ESCL}.csv` (0–100).
 
-4. **Terreno / distribución comunal (`terrain_blend.py`)**  
+4. **Terreno / distribución comunal (`terrain_blend.py`)**
    - Une padrón (`comuna_padron_2024.csv`) con un mapa de comunas (`comunas_censo_2024.csv`) para obtener `comuna_id`.
    - Construye un **índice territorial** `L_c` (0–1) usando plebiscitos 2022 (**Rechazo**) y 2023 (**En Contra**) con pesos configurables.
+   - Detecta automáticamente alias comunes de columnas (ej. `rech22`, `rechazo_2022`, `apr23`, `enc23`) para que puedas usar distintos encabezados sin editar el script.
    - Aplica un _tilt_ por candidato `exp(beta_k * (L_c - media(L)))` (**`BETA_BY_CANDIDATE`** configurable).
    - **Raking (IPF)** para que la suma ponderada por padrón cuadre exactamente con la **cuota nacional** del paso 3.
    - Exporta:
      - `bbdd/comunas_nowcast_shares.csv` (comuna × candidato, en %)
      - `bbdd/nowcast_shares_nacional_from_terrain.csv` (verificación nacional).
 
-5. **Gráficas (`plot_intencion.py`)**  
+5. **Gráficas (`plot_intencion.py`)**
    - Barras limpias 0–100 de cuotas nacionales (o por fuente).
+   - Auto-detecta si `bbdd/nowcast_final_table.csv` viene en formato estándar o local (ES-CL) y mapea las columnas equivalentes antes de graficar.
    - _Opcional:_ mapas por comuna (requiere `geopandas` y shapes).
 
 ---
@@ -177,8 +179,9 @@ owcast_blend.py
 
 ---
 
-## 6) Lógica de mezcla (resumen)
-
+- **“No encuentro columna …”**
+  - Revisa encabezados. Renombra columnas siguiendo los indicios del README.
+  - Para plebiscitos 2022/2023 puedes usar abreviaturas como `rech22`, `apr23`, `apr22`, `rech23`, etc. El script intentará encontrarlas igual, pero si inventas un nombre totalmente nuevo agrégalo en el diccionario de alias.
 - **Encuestas:** cada fila se convierte a **logit** y se corrige por **house effect** (si existe). Se aplica decaimiento temporal y tamaño muestral efectivo. Se obtiene un **promedio ponderado** en logit → probabilidad final por candidato.
 - **Mercados:** se usan probabilidades implícitas (con filtro de volumen). Pesos por plataforma según `BSS_norm` o `w_platform_base`.
 - **Blend:** `share_blend = LAMBDA * share_polls + (1-LAMBDA) * share_market` (con normalización a 1).
