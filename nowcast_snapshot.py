@@ -142,6 +142,10 @@ def aggregate_results_2021() -> dict[str, float]:
             "results_2021_comuna.csv no tiene columnas numéricas reconocibles. "
             f"Columnas detectadas: {matched_columns or 'ninguna'}. Encabezados disponibles: {cols}"
         )
+        shares[key] = float(to_numeric(df[col]).fillna(0.0).sum())
+    total = sum(shares.values())
+    if total <= 0:
+        raise RuntimeError("results_2021_comuna.csv no tiene columnas numéricas reconocibles.")
     for key in list(shares):
         shares[key] /= total
     block = {
@@ -383,6 +387,10 @@ def load_markets() -> pd.Series:
     if len(zero_candidates) > 0:
         fallback = markets.groupby("candidate")["prob"].mean()
         agg.loc[zero_candidates] = fallback.loc[zero_candidates]
+    agg = markets.groupby("candidate", group_keys=False).apply(
+    agg = markets.groupby("candidate").apply(
+        lambda g: np.average(g["prob"], weights=g["w_final"]) if g["w_final"].sum() > 0 else g["prob"].mean()
+    )
     agg = agg.clip(lower=0.0)
     total = agg.sum()
     if total <= 0:
