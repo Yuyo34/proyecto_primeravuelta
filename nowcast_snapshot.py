@@ -289,7 +289,23 @@ PRIOR_WEIGHTS_BY_CANDIDATE: dict[str, dict[str, float]] = {
         "pleb_a_favor_2023": 0.20,
     },
 }
+# ... (después de PRIOR_WEIGHTS_BY_CANDIDATE y DEFAULT_PRIOR_WEIGHTS) ...
 
+# Diccionario para mapear nombres normalizados a nombres de visualización
+CANDIDATE_DISPLAY_NAMES = {
+    "jeannette_jara": "Jeannette Jara",
+    "jose_antonio_kast": "José Antonio Kast",
+    "johannes_kaiser": "Johannes Kaiser",
+    "evelyn_matthei": "Evelyn Matthei",
+    "franco_parisi": "Franco Parisi",
+    "harold_mayne_nicholls": "Harold Mayne-Nicholls",
+    "marco_enriquez_ominami": "Marco Enríquez-Ominami",
+    "eduardo_artes": "Eduardo Artés",
+    # Asegúrate de añadir cualquier otro candidato que pueda aparecer
+    # Si un candidato no está aquí, su nombre normalizado se usará por defecto.
+}
+
+# --- blend final ----------------------------------------------------------
 DEFAULT_PRIOR_WEIGHTS = {
     "left_2021": 0.30,
     "right_2021": 0.30,
@@ -475,14 +491,17 @@ def load_markets() -> pd.Series:
 def ensure_positive(series: pd.Series, eps: float = 1e-3) -> pd.Series:
     return series.clip(lower=eps)
 
-
 def build_plot(df: pd.DataFrame, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(11, 6.5))
     values = df["share_from_polls_pct"].to_numpy()
-    labels = df["candidate"].tolist()
+    # --- MODIFICACIÓN ---
+    # Mapea los nombres normalizados a los nombres de visualización.
+    # .get() usa el nombre normalizado si no encuentra un mapeo explícito.
+    labels = [CANDIDATE_DISPLAY_NAMES.get(c, c) for c in df["candidate"].tolist()]
+    # --- FIN MODIFICACIÓN ---
     bars = ax.bar(labels, values, color="#1f78b4")
     for bar, value in zip(bars, values):
-        ax.text(bar.get_x() + bar.get_width() / 2, value + 0.6, f"{value:.0f}%",
+            ax.text(bar.get_x() + bar.get_width() / 2, value + 0.6, f"{value:.1f}%",
                 ha="center", va="bottom", fontsize=11, fontweight="bold")
     ax.set_ylabel("% del voto válido")
     ax.set_title("Intención de voto – primera vuelta\nBlend encuestas + mercados", fontsize=15, fontweight="bold")
