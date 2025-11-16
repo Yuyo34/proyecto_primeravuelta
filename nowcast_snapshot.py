@@ -128,24 +128,51 @@ def find_column(df: pd.DataFrame, patterns: list[str]) -> str | None:
 def aggregate_results_2021() -> dict[str, float]:
     df = read_csv_guess(BASE / "results_2021_comuna.csv")
     shares: dict[str, float] = {}
-    matched_columns: dict[str, str] = {}
+
+    # --- INICIO DE LA MODIFICACIÓN ---
+    # 1. Encontrar las columnas de candidato y votos
+    candidato_col = find_column(df, [r"^candidato$"])
+    votos_col = find_column(df, [r"^votos_candidato$", r"^votos_validos$"]) # Buscar 'votos_candidato' o 'votos_validos'
+    
+    if not candidato_col or not votos_col:
+        cols_disponibles = ", ".join(df.columns[:20])
+        raise RuntimeError(
+            "results_2021_comuna.csv (formato largo) debe tener una columna de 'candidato' y una de 'votos'. "
+            f"No se encontraron. Encabezados disponibles: {cols_disponibles}"
+        )
+        
+    # 2. Preparar las columnas
+    # Usar _norm (definido globalmente) para normalizar los *nombres* en la columna 'candidato'
+    df["candidato_norm"] = df[candidato_col].astype(str).map(_norm)
+    df["votos_num"] = to_numeric(df[votos_col]).fillna(0.0)
+
+    matched_columns_info: list[str] = [] # Usar una lista para el mensaje de error
+
+    # 3. Iterar por los alias y sumar votos filtrando *filas*
     for key, pats in RESULTS_2021_ALIASES.items():
-        col = find_column(df, pats)
-        if not col:
-            continue
-        matched_columns[key] = col
-        shares[key] = float(to_numeric(df[col]).fillna(0.0).sum())
+        # Crear una máscara que sea True si *cualquier* patrón de alias coincide
+        mask = pd.Series(False, index=df.index)
+        for pat in pats:
+            # 'na=False' trata los NaN como si no coincidieran
+            mask |= df["candidato_norm"].str.contains(pat, regex=True, na=False)
+        
+        total_votes_for_cand = df.loc[mask, "votos_num"].sum()
+        
+        if total_votes_for_cand > 0:
+            matched_columns_info.append(key)
+        shares[key] = float(total_votes_for_cand)
+    
+    # --- FIN DE LA MODIFICACIÓN ---
+
     total = sum(shares.values())
     if total <= 0:
         cols = ", ".join(df.columns[:20])  # evita imprimir archivos enormes
         raise RuntimeError(
-            "results_2021_comuna.csv no tiene columnas numéricas reconocibles. "
-            f"Columnas detectadas: {matched_columns or 'ninguna'}. Encabezados disponibles: {cols}"
+            "results_2021_comuna.csv no tiene votos válidos o los patrones no coinciden con la columna 'candidato'. "
+            f"Candidatos detectados: {matched_columns_info or 'ninguno'}. Encabezados disponibles: {cols}"
         )
-        shares[key] = float(to_numeric(df[col]).fillna(0.0).sum())
-    total = sum(shares.values())
-    if total <= 0:
-        raise RuntimeError("results_2021_comuna.csv no tiene columnas numéricas reconocibles.")
+    
+    # El resto de la función es idéntica y debería funcionar
     for key in list(shares):
         shares[key] /= total
     block = {
@@ -158,20 +185,52 @@ def aggregate_results_2021() -> dict[str, float]:
     block["others_2021"] = rem
     return block
 
-
 def aggregate_plebiscite(path: Path, positive: list[str], negative: list[str]) -> tuple[float, float]:
     df = read_csv_guess(path)
-    pos_col = find_column(df, positive)
-    neg_col = find_column(df, negative)
-    if not pos_col or not neg_col:
-        raise RuntimeError(f"No pude detectar columnas plebiscito en {path.name}.")
-    pos = to_numeric(df[pos_col]).fillna(0.0).sum()
-    neg = to_numeric(df[neg_col]).fillna(0.0).sum()
+
+    # --- INICIO DE LA MODIFICACIÓN ---
+    # 1. Encontrar las columnas de opción y votos
+    #    (Usamos ^ y $ para búsquedas exactas si es posible)
+    opcion_col = find_column(df, [r"^opcion$", r"opcion", r"alternativa", r"candidato"])
+    votos_col = find_column(df, [r"^votos$", r"^votos_candidato$", r"votos"])
+    
+    if not opcion_col or not votos_col:
+        cols_disponibles = ", ".join(df.columns[:20])
+        raise RuntimeError(
+            f"{path.name} (formato largo) debe tener una columna de 'opcion' y una de 'votos'. "
+            f"No se encontraron. Encabezados disponibles: {cols_disponibles}"
+        )
+
+    # 2. Preparar las columnas
+    df["opcion_norm"] = df[opcion_col].astype(str).map(_norm)
+    df["votos_num"] = to_numeric(df[votos_col]).fillna(0.0)
+
+    # 3. Sumar votos para las opciones positiva y negativa
+    pos = 0.0
+    neg = 0.0
+
+    # Sumar para el polo positivo
+    mask_pos = pd.Series(False, index=df.index)
+    for pat in positive:
+        mask_pos |= df["opcion_norm"].str.contains(pat, regex=True, na=False)
+    pos = float(df.loc[mask_pos, "votos_num"].sum())
+    
+    # Sumar para el polo negativo
+    mask_neg = pd.Series(False, index=df.index)
+    for pat in negative:
+        mask_neg |= df["opcion_norm"].str.contains(pat, regex=True, na=False)
+    neg = float(df.loc[mask_neg, "votos_num"].sum())
+
+    # --- FIN DE LA MODIFICACIÓN ---
+
     total = pos + neg
     if total <= 0:
-        raise RuntimeError(f"{path.name} no tiene datos numéricos válidos.")
+        opciones_encontradas = df["opcion_norm"].unique()[:10]
+        raise RuntimeError(
+            f"{path.name} no tiene datos numéricos válidos o los patrones no coinciden. "
+            f"Opciones normalizadas encontradas (ejemplos): {opciones_encontradas}"
+        )
     return pos / total, neg / total
-
 
 def build_prior_blocks() -> dict[str, float]:
     blocks = aggregate_results_2021()
@@ -387,7 +446,7 @@ def load_markets() -> pd.Series:
     if len(zero_candidates) > 0:
         fallback = markets.groupby("candidate")["prob"].mean()
         agg.loc[zero_candidates] = fallback.loc[zero_candidates]
-    agg = markets.groupby("candidate", group_keys=False).apply(
+    
     agg = markets.groupby("candidate").apply(
         lambda g: np.average(g["prob"], weights=g["w_final"]) if g["w_final"].sum() > 0 else g["prob"].mean()
     )
