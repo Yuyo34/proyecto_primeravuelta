@@ -125,35 +125,32 @@ def find_column(df: pd.DataFrame, patterns: list[str]) -> str | None:
     return None
 
 
+# VERSIÓN CORREGIDA para formato "largo" de CSV
 def aggregate_results_2021() -> dict[str, float]:
     df = read_csv_guess(BASE / "results_2021_comuna.csv")
     shares: dict[str, float] = {}
 
-    # --- INICIO DE LA MODIFICACIÓN ---
     # 1. Encontrar las columnas de candidato y votos
-    candidato_col = find_column(df, [r"^candidato$"])
-    votos_col = find_column(df, [r"^votos_candidato$", r"^votos_validos$"]) # Buscar 'votos_candidato' o 'votos_validos'
+    candidato_col = find_column(df, [r"^candidato$"]) # Búsqueda exacta
+    votos_col = find_column(df, [r"^votos_candidato$", r"^votos_validos$"]) # Búsqueda exacta
     
     if not candidato_col or not votos_col:
         cols_disponibles = ", ".join(df.columns[:20])
         raise RuntimeError(
-            "results_2021_comuna.csv (formato largo) debe tener una columna de 'candidato' y una de 'votos'. "
+            "results_2021_comuna.csv (formato largo) debe tener una columna de 'candidato' y una de 'votos' (idealmente 'votos_candidato'). "
             f"No se encontraron. Encabezados disponibles: {cols_disponibles}"
         )
         
     # 2. Preparar las columnas
-    # Usar _norm (definido globalmente) para normalizar los *nombres* en la columna 'candidato'
     df["candidato_norm"] = df[candidato_col].astype(str).map(_norm)
     df["votos_num"] = to_numeric(df[votos_col]).fillna(0.0)
 
-    matched_columns_info: list[str] = [] # Usar una lista para el mensaje de error
+    matched_columns_info: list[str] = []
 
     # 3. Iterar por los alias y sumar votos filtrando *filas*
     for key, pats in RESULTS_2021_ALIASES.items():
-        # Crear una máscara que sea True si *cualquier* patrón de alias coincide
         mask = pd.Series(False, index=df.index)
         for pat in pats:
-            # 'na=False' trata los NaN como si no coincidieran
             mask |= df["candidato_norm"].str.contains(pat, regex=True, na=False)
         
         total_votes_for_cand = df.loc[mask, "votos_num"].sum()
@@ -162,17 +159,14 @@ def aggregate_results_2021() -> dict[str, float]:
             matched_columns_info.append(key)
         shares[key] = float(total_votes_for_cand)
     
-    # --- FIN DE LA MODIFICACIÓN ---
-
     total = sum(shares.values())
     if total <= 0:
-        cols = ", ".join(df.columns[:20])  # evita imprimir archivos enormes
+        cols = ", ".join(df.columns[:20])
         raise RuntimeError(
             "results_2021_comuna.csv no tiene votos válidos o los patrones no coinciden con la columna 'candidato'. "
             f"Candidatos detectados: {matched_columns_info or 'ninguno'}. Encabezados disponibles: {cols}"
         )
     
-    # El resto de la función es idéntica y debería funcionar
     for key in list(shares):
         shares[key] /= total
     block = {
@@ -185,12 +179,11 @@ def aggregate_results_2021() -> dict[str, float]:
     block["others_2021"] = rem
     return block
 
+# VERSIÓN CORREGIDA para formato "largo" de CSV
 def aggregate_plebiscite(path: Path, positive: list[str], negative: list[str]) -> tuple[float, float]:
     df = read_csv_guess(path)
 
-    # --- INICIO DE LA MODIFICACIÓN ---
     # 1. Encontrar las columnas de opción y votos
-    #    (Usamos ^ y $ para búsquedas exactas si es posible)
     opcion_col = find_column(df, [r"^opcion$", r"opcion", r"alternativa", r"candidato"])
     votos_col = find_column(df, [r"^votos$", r"^votos_candidato$", r"votos"])
     
@@ -198,7 +191,7 @@ def aggregate_plebiscite(path: Path, positive: list[str], negative: list[str]) -
         cols_disponibles = ", ".join(df.columns[:20])
         raise RuntimeError(
             f"{path.name} (formato largo) debe tener una columna de 'opcion' y una de 'votos'. "
-            f"No se encontraron. Encabezados disponibles: {cols_disponibles}"
+            f"No se encontraron. EncabezADOS disponibles: {cols_disponibles}"
         )
 
     # 2. Preparar las columnas
@@ -209,19 +202,15 @@ def aggregate_plebiscite(path: Path, positive: list[str], negative: list[str]) -
     pos = 0.0
     neg = 0.0
 
-    # Sumar para el polo positivo
     mask_pos = pd.Series(False, index=df.index)
     for pat in positive:
         mask_pos |= df["opcion_norm"].str.contains(pat, regex=True, na=False)
     pos = float(df.loc[mask_pos, "votos_num"].sum())
     
-    # Sumar para el polo negativo
     mask_neg = pd.Series(False, index=df.index)
     for pat in negative:
         mask_neg |= df["opcion_norm"].str.contains(pat, regex=True, na=False)
     neg = float(df.loc[mask_neg, "votos_num"].sum())
-
-    # --- FIN DE LA MODIFICACIÓN ---
 
     total = pos + neg
     if total <= 0:
@@ -255,45 +244,46 @@ def build_prior_blocks() -> dict[str, float]:
     return blocks
 
 
+# CORRECCIÓN: Nombres de candidatos (las llaves) normalizados para coincidir
 PRIOR_WEIGHTS_BY_CANDIDATE: dict[str, dict[str, float]] = {
-    "Jeannette Jara": {
+    "jeannette_jara": { 
         "left_2021": 0.45,
         "pleb_apruebo_2022": 0.30,
         "pleb_a_favor_2023": 0.25,
     },
-    "José Antonio Kast": {
+    "jose_antonio_kast": {
         "right_2021": 0.55,
         "pleb_rechazo_2022": 0.25,
         "pleb_en_contra_2023": 0.20,
     },
-    "Johannes Kaiser": {
+    "johannes_kaiser": {
         "right_2021": 0.60,
         "pleb_rechazo_2022": 0.20,
         "pleb_en_contra_2023": 0.20,
     },
-    "Evelyn Matthei": {
+    "evelyn_matthei": {
         "right_2021": 0.35,
         "populist_2021": 0.25,
         "pleb_rechazo_2022": 0.20,
         "pleb_en_contra_2023": 0.20,
     },
-    "Franco Parisi": {
+    "franco_parisi": {
         "populist_2021": 0.70,
         "right_2021": 0.15,
         "left_2021": 0.15,
     },
-    "Harold Mayne-Nicholls": {
+    "harold_mayne_nicholls": {
         "left_2021": 0.30,
         "populist_2021": 0.30,
         "pleb_apruebo_2022": 0.20,
         "pleb_a_favor_2023": 0.20,
     },
-    "Marco Enríquez-Ominami": {
+    "marco_enriquez_ominami": {
         "left_2021": 0.55,
         "pleb_apruebo_2022": 0.25,
         "pleb_a_favor_2023": 0.20,
     },
-    "Eduardo Artés": {
+    "eduardo_artes": {
         "left_2021": 0.60,
         "pleb_apruebo_2022": 0.20,
         "pleb_a_favor_2023": 0.20,
@@ -314,6 +304,7 @@ DEFAULT_PRIOR_WEIGHTS = {
 def build_prior_alpha(candidates: list[str], blocks: dict[str, float]) -> pd.Series:
     raw = {}
     for cand in candidates:
+        # 'cand' ya viene normalizado (ej: 'marco_enriquez_ominami')
         weights = PRIOR_WEIGHTS_BY_CANDIDATE.get(cand, DEFAULT_PRIOR_WEIGHTS)
         denom = sum(weights.values()) or 1.0
         val = 0.0
@@ -329,11 +320,15 @@ def build_prior_alpha(candidates: list[str], blocks: dict[str, float]) -> pd.Ser
 
 POLL_WEIGHT_COLUMNS = ["w_logit", "w_poll", "w_pre", "w_time", "w_size"]
 
-
 def load_polls() -> tuple[pd.Series, float]:
     polls = read_csv_guess(prefer_clean("polls_long"))
     polls = polls[polls["poll_id"].notna() & polls["candidate"].notna()].copy()
-    polls["candidate"] = polls["candidate"].astype(str).str.strip()
+
+    # --- CORRECCIÓN DUPLICADOS (MEO) ---
+    # Usar _norm() para normalizar acentos, mayúsculas, guiones y espacios
+    polls["candidate"] = polls["candidate"].map(_norm)
+    # --- FIN CORRECCIÓN ---
+
     for c in ["share_adj_pct", "n_effective", "n_reported"]:
         if c in polls.columns:
             polls[c] = to_numeric(polls[c])
@@ -410,12 +405,19 @@ def load_markets() -> pd.Series:
     markets.columns = [c.strip() for c in markets.columns]
     if "candidate" not in markets.columns:
         raise RuntimeError("markets.csv debe tener columna 'candidate'.")
+        
+    # --- CORRECCIÓN DUPLICADOS (MEO) ---
+    # Usar _norm() para normalizar acentos, mayúsculas, guiones y espacios
+    markets["candidate"] = markets["candidate"].map(_norm)
+    # --- FIN CORRECCIÓN ---
+    
     if "implied_prob" in markets.columns:
         markets["prob"] = markets["implied_prob"].apply(parse_prob_cell)
     elif "price_yes" in markets.columns:
         markets["prob"] = markets["price_yes"].apply(parse_prob_cell)
     else:
         raise RuntimeError("markets.csv necesita columna 'implied_prob' o 'price_yes'.")
+        
     weights_platform = load_market_weights()
     if "platform" not in markets.columns:
         markets["platform"] = "unknown"
@@ -434,26 +436,36 @@ def load_markets() -> pd.Series:
     markets = markets[markets["prob"].notna() & markets["prob"].between(0, 1)]
     if markets.empty:
         raise RuntimeError("markets.csv no tiene probabilidades válidas.")
+    
+    # --- LÍNEA RESTAURADA (ESTA FALTABA Y CAUSÓ EL KEYERROR) ---
     markets["prob_weighted"] = markets["prob"] * markets["w_final"]
+    # -----------------------------------------------------------
+
     grouped = markets.groupby("candidate")[["prob_weighted", "w_final"]].sum()
     agg = pd.Series(index=grouped.index, dtype=float)
+    
     positive_mask = grouped["w_final"] > 0
     positive_idx = grouped.index[positive_mask]
     agg.loc[positive_idx] = grouped.loc[positive_idx, "prob_weighted"] / grouped.loc[
         positive_idx, "w_final"
     ]
+    
     zero_candidates = grouped.index[~positive_mask]
     if len(zero_candidates) > 0:
         fallback = markets.groupby("candidate")["prob"].mean()
         agg.loc[zero_candidates] = fallback.loc[zero_candidates]
-    
-    agg = markets.groupby("candidate").apply(
-        lambda g: np.average(g["prob"], weights=g["w_final"]) if g["w_final"].sum() > 0 else g["prob"].mean()
-    )
+        
     agg = agg.clip(lower=0.0)
     total = agg.sum()
     if total <= 0:
-        raise RuntimeError("La suma de probabilidades de mercado es 0.")
+        if not markets.empty:
+            agg = markets.groupby("candidate")["prob"].mean().clip(lower=0.0)
+            total = agg.sum()
+            if total <= 0:
+                 raise RuntimeError("La suma de probabilidades de mercado es 0, incluso en el fallback.")
+        else:
+             raise RuntimeError("La suma de probabilidades de mercado es 0.")
+    
     agg = agg / total
     return agg
 
@@ -491,6 +503,7 @@ def main() -> None:
     market_probs = load_markets()
     prior_blocks = build_prior_blocks()
 
+    # 'candidates' ahora contendrá nombres normalizados (ej: 'marco_enriquez_ominami')
     candidates = sorted(set(poll_alpha.index) | set(market_probs.index))
     prior_alpha = build_prior_alpha(candidates, prior_blocks)
 
@@ -520,7 +533,7 @@ def main() -> None:
 
     final_df = pd.DataFrame(
         {
-            "candidate": candidates,
+            "candidate": candidates, # Los nombres aquí estarán normalizados
             "share_from_polls_pct": shares_pct,
             "p_win_market_pct": p_win_market,
             "p_win_from_polls_pct": p_win_from_polls,
@@ -542,4 +555,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
